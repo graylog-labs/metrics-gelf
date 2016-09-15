@@ -158,9 +158,9 @@ public class GelfReporterTest {
                 .containsEntry("name", "prefix.foo.bar")
                 .containsEntry("type", "TIMER")
                 .containsEntry("count", 2L)
-                .containsEntry("min", 5000000L)
-                .containsEntry("max", 10000000L)
-                .containsEntry("mean", 7500000.0)
+                .containsEntry("min", 5.0)
+                .containsEntry("max", 10.0)
+                .containsEntry("mean", 7.5)
                 .containsEntry("test", "foobar");
     }
 
