@@ -45,6 +45,16 @@
         <url>https://www.graylog.org/</url>
     </organization>
 
+    <developers>
+        <developer>
+            <id>joschi</id>
+            <name>Jochen Schalanda</name>
+            <organization>Graylog, Inc.</organization>
+            <organizationUrl>https://www.graylog.org/</organizationUrl>
+            <timezone>Europe/Berlin</timezone>
+        </developer>
+    </developers>
+
     <distributionManagement>
         <snapshotRepository>
             <id>ossrh</id>
