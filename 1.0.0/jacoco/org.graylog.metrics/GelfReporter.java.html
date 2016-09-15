@@ -1,0 +1,548 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GelfReporter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">metrics-gelf</a> &gt; <a href="index.source.html" class="el_package">org.graylog.metrics</a> &gt; <span class="el_source">GelfReporter.java</span></div><h1>GelfReporter.java</h1><pre class="source lang-java linenums">/**
+ * Copyright © 2016 Graylog, Inc. (hello@graylog.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.graylog.metrics;
+
+import com.codahale.metrics.Clock;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricFilter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.ScheduledReporter;
+import com.codahale.metrics.Snapshot;
+import com.codahale.metrics.Timer;
+import org.graylog2.gelfclient.GelfConfiguration;
+import org.graylog2.gelfclient.GelfMessageBuilder;
+import org.graylog2.gelfclient.GelfMessageLevel;
+import org.graylog2.gelfclient.GelfTransports;
+import org.graylog2.gelfclient.transport.GelfTransport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.net.InetSocketAddress;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.concurrent.TimeUnit;
+
+import static java.util.Objects.requireNonNull;
+
+public class GelfReporter extends ScheduledReporter {
+    /**
+     * Returns a new {@link Builder} for {@link GelfReporter}.
+     *
+     * @param registry the registry to report
+     * @return a {@link Builder} instance for a {@link GelfReporter}
+     */
+    public static Builder forRegistry(MetricRegistry registry) {
+<span class="fc" id="L54">        return new Builder(registry);</span>
+    }
+
+    /**
+     * A builder for {@link GelfReporter} instances. Defaults to using {@code 127.0.0.1:12201}
+     * via UDP as default target, using the {@code INFO} message level,
+     * converting rates to events/second, converting durations to milliseconds, and not filtering metrics.
+     */
+    public static class Builder {
+        private final MetricRegistry registry;
+        private Clock clock;
+        private String prefix;
+        private TimeUnit rateUnit;
+        private TimeUnit durationUnit;
+        private MetricFilter filter;
+        private InetSocketAddress hostAddress;
+        private int queueSize;
+        private boolean tlsEnabled;
+        private File tlsTrustCertChainFile;
+        private boolean tlsCertVerificationEnabled;
+        private int reconnectDelay;
+        private int connectTimeout;
+        private boolean tcpNoDelay;
+        private boolean tcpKeepAlive;
+        private int sendBufferSize;
+        private int maxInFlightSends;
+        private GelfMessageLevel level;
+        private String source;
+
+        private Map&lt;String, Object&gt; additionalFields;
+        private GelfTransports transport;
+
+<span class="fc" id="L86">        private Builder(MetricRegistry registry) {</span>
+<span class="fc" id="L87">            this.registry = registry;</span>
+<span class="fc" id="L88">            this.clock = Clock.defaultClock();</span>
+<span class="fc" id="L89">            this.prefix = null;</span>
+<span class="fc" id="L90">            this.rateUnit = TimeUnit.SECONDS;</span>
+<span class="fc" id="L91">            this.durationUnit = TimeUnit.MILLISECONDS;</span>
+<span class="fc" id="L92">            this.filter = MetricFilter.ALL;</span>
+<span class="fc" id="L93">            this.hostAddress = new InetSocketAddress(&quot;127.0.0.1&quot;, 12201);</span>
+<span class="fc" id="L94">            this.transport = GelfTransports.UDP;</span>
+<span class="fc" id="L95">            this.queueSize = 512;</span>
+<span class="fc" id="L96">            this.tlsEnabled = false;</span>
+<span class="fc" id="L97">            this.tlsTrustCertChainFile = null;</span>
+<span class="fc" id="L98">            this.tlsCertVerificationEnabled = true;</span>
+<span class="fc" id="L99">            this.reconnectDelay = 500;</span>
+<span class="fc" id="L100">            this.connectTimeout = 1000;</span>
+<span class="fc" id="L101">            this.tcpNoDelay = false;</span>
+<span class="fc" id="L102">            this.tcpKeepAlive = false;</span>
+<span class="fc" id="L103">            this.sendBufferSize = -1;</span>
+<span class="fc" id="L104">            this.maxInFlightSends = 512;</span>
+<span class="fc" id="L105">            this.level = GelfMessageLevel.INFO;</span>
+<span class="fc" id="L106">            this.source = &quot;metrics&quot;;</span>
+<span class="fc" id="L107">        }</span>
+
+        /**
+         * Use the given {@link Clock} instance for the time.
+         *
+         * @param clock a {@link Clock} instance
+         * @return {@code this}
+         */
+        public Builder withClock(Clock clock) {
+<span class="nc" id="L116">            this.clock = requireNonNull(clock);</span>
+<span class="nc" id="L117">            return this;</span>
+        }
+
+        /**
+         * Configure a prefix for each metric name. Optional, but useful to identify single hosts.
+         *
+         * @param prefix The prefix for each metric name
+         * @return {@code this}
+         */
+        public Builder prefixedWith(String prefix) {
+<span class="nc" id="L127">            this.prefix = prefix;</span>
+<span class="nc" id="L128">            return this;</span>
+        }
+
+        /**
+         * Convert rates to the given time unit.
+         *
+         * @param rateUnit a unit of time
+         * @return {@code this}
+         */
+        public Builder convertRatesTo(TimeUnit rateUnit) {
+<span class="nc" id="L138">            this.rateUnit = requireNonNull(rateUnit);</span>
+<span class="nc" id="L139">            return this;</span>
+        }
+
+        /**
+         * Convert durations to the given time unit.
+         *
+         * @param durationUnit a unit of time
+         * @return {@code this}
+         */
+        public Builder convertDurationsTo(TimeUnit durationUnit) {
+<span class="nc" id="L149">            this.durationUnit = requireNonNull(durationUnit);</span>
+<span class="nc" id="L150">            return this;</span>
+        }
+
+        /**
+         * Only report metrics which match the given filter.
+         *
+         * @param filter a {@link MetricFilter}
+         * @return {@code this}
+         */
+        public Builder filter(MetricFilter filter) {
+<span class="nc" id="L160">            this.filter = filter;</span>
+<span class="nc" id="L161">            return this;</span>
+        }
+
+        /**
+         * Address of the GELF server to connect to, defaults to {@code 127.0.0.1:12201}
+         *
+         * @param hostAddress the address of the GELF server to connect to
+         * @return {@code this}
+         */
+        public Builder host(InetSocketAddress hostAddress) {
+<span class="fc" id="L171">            this.hostAddress = requireNonNull(hostAddress);</span>
+<span class="fc" id="L172">            return this;</span>
+        }
+
+        /**
+         * Additional fields to be included with each GELF message.
+         *
+         * @param additionalFields A map of additional fields to include with each GELF message
+         * @return {@code this}
+         */
+        public Builder additionalFields(Map&lt;String, Object&gt; additionalFields) {
+<span class="nc" id="L182">            this.additionalFields = requireNonNull(additionalFields);</span>
+<span class="nc" id="L183">            return this;</span>
+        }
+
+        /**
+         * The transport protocol used with the GELF server.
+         *
+         * @param transport the transport protocol used with the GELF server
+         * @return {@code this}
+         * @see GelfTransports
+         */
+        public Builder transport(final GelfTransports transport) {
+<span class="nc" id="L194">            this.transport = requireNonNull(transport);</span>
+<span class="nc" id="L195">            return this;</span>
+        }
+
+        /**
+         * The size of the internally used {@link java.util.concurrent.BlockingQueue}.
+         *
+         * @param size the size of the internally used queue
+         * @return {@code this}
+         */
+        public Builder queueSize(final int size) {
+<span class="nc" id="L205">            queueSize = size;</span>
+<span class="nc" id="L206">            return this;</span>
+        }
+
+        /**
+         * Enable TLS for transport.
+         *
+         * @param tlsEnabled Whether to enable TLS
+         * @return {@code this}
+         */
+        public Builder tlsEnabled(boolean tlsEnabled) {
+<span class="nc" id="L216">            this.tlsEnabled = tlsEnabled;</span>
+<span class="nc" id="L217">            return this;</span>
+        }
+
+        /**
+         * The trust certificate chain file for the TLS connection.
+         *
+         * @param tlsTrustCertChainFile the trust certificate chain file
+         * @return {@code this}
+         */
+        public Builder tlsTrustCertChainFile(final File tlsTrustCertChainFile) {
+<span class="nc" id="L227">            this.tlsTrustCertChainFile = tlsTrustCertChainFile;</span>
+<span class="nc" id="L228">            return this;</span>
+        }
+
+        /**
+         * Enable TLS certificate verification for transport.
+         *
+         * @param tlsCertVerificationEnabled Whether to enable TLS certificate verification
+         * @return {@code this}
+         */
+        public Builder tlsCertVerificationEnabled(boolean tlsCertVerificationEnabled) {
+<span class="nc" id="L238">            this.tlsCertVerificationEnabled = tlsCertVerificationEnabled;</span>
+<span class="nc" id="L239">            return this;</span>
+        }
+
+        /**
+         * The time to wait between reconnects in milliseconds.
+         *
+         * @param reconnectDelay the time to wait between reconnects in milliseconds
+         * @return {@code this}
+         */
+        public Builder reconnectDelay(final int reconnectDelay) {
+<span class="nc" id="L249">            this.reconnectDelay = reconnectDelay;</span>
+<span class="nc" id="L250">            return this;</span>
+        }
+
+        /**
+         * The connection timeout for TCP connections in milliseconds.
+         *
+         * @param connectTimeout the connection timeout for TCP connections in milliseconds
+         * @return {@code this}
+         */
+        public Builder connectTimeout(final int connectTimeout) {
+<span class="nc" id="L260">            this.connectTimeout = connectTimeout;</span>
+<span class="nc" id="L261">            return this;</span>
+        }
+
+        /**
+         * Whether to use &lt;a href=&quot;https://en.wikipedia.org/wiki/Nagle's_algorithm&quot;&gt;Nagle's algorithm&lt;/a&gt; for TCP connections.
+         *
+         * @param tcpNoDelay {@code true} if Nagle's algorithm should used for TCP connections, {@code false} otherwise
+         * @return {@code this} instance
+         */
+        public Builder tcpNoDelay(final boolean tcpNoDelay) {
+<span class="nc" id="L271">            this.tcpNoDelay = tcpNoDelay;</span>
+<span class="nc" id="L272">            return this;</span>
+        }
+
+        /**
+         * Whether to use &lt;a href=&quot;https://en.wikipedia.org/wiki/Keepalive#TCP_keepalive&quot;&gt;TCP keepalive&lt;/a&gt; for TCP connections.
+         *
+         * @param tcpKeepAlive Whether to use TCP keepalive for TCP connections
+         * @return {@code this} instance
+         */
+        public Builder tcpKeepAlive(final boolean tcpKeepAlive) {
+<span class="nc" id="L282">            this.tcpKeepAlive = tcpKeepAlive;</span>
+<span class="nc" id="L283">            return this;</span>
+        }
+
+        /**
+         * The size of the socket send buffer in bytes.
+         *
+         * @param sendBufferSize the size of the socket send buffer in bytes.
+         *                       A value of {@code -1} deactivates the socket send buffer.
+         * @return {@code this}
+         */
+        public Builder sendBufferSize(final int sendBufferSize) {
+<span class="nc" id="L294">            this.sendBufferSize = sendBufferSize;</span>
+<span class="nc" id="L295">            return this;</span>
+        }
+
+        /**
+         * The number of max queued network operations.
+         *
+         * @param maxInFlightSends max number of queued network operations
+         * @return {@code this}
+         */
+        public Builder maxInFlightSends(int maxInFlightSends) {
+<span class="nc" id="L305">            this.maxInFlightSends = maxInFlightSends;</span>
+<span class="nc" id="L306">            return this;</span>
+        }
+
+        /**
+         * The GELF message level used for reporting metrics.
+         *
+         * @param level GELF message level
+         * @return {@code this}
+         * @see GelfMessageLevel
+         */
+        public Builder level(GelfMessageLevel level) {
+<span class="nc" id="L317">            this.level = requireNonNull(level);</span>
+<span class="nc" id="L318">            return this;</span>
+        }
+
+        /**
+         * The name of the source of the GELF messages.
+         *
+         * @param source the name of the source host in the GELF messages
+         * @return {@code this}
+         */
+        public Builder source(String source) {
+<span class="nc" id="L328">            this.source = requireNonNull(source);</span>
+<span class="nc" id="L329">            return this;</span>
+        }
+
+        /**
+         * Builds a {@link GelfReporter} with the given properties.
+         *
+         * @return a {@link GelfReporter}
+         */
+        public GelfReporter build() {
+<span class="fc" id="L338">            final GelfConfiguration configuration = new GelfConfiguration(hostAddress)</span>
+<span class="fc" id="L339">                    .transport(transport)</span>
+<span class="fc" id="L340">                    .queueSize(queueSize)</span>
+<span class="fc" id="L341">                    .maxInflightSends(maxInFlightSends)</span>
+<span class="fc" id="L342">                    .connectTimeout(connectTimeout)</span>
+<span class="fc" id="L343">                    .sendBufferSize(sendBufferSize)</span>
+<span class="fc" id="L344">                    .reconnectDelay(reconnectDelay)</span>
+<span class="fc" id="L345">                    .tcpKeepAlive(tcpKeepAlive)</span>
+<span class="fc" id="L346">                    .tcpNoDelay(tcpNoDelay);</span>
+
+<span class="pc bpc" id="L348" title="1 of 2 branches missed.">            if (tlsEnabled) {</span>
+<span class="nc" id="L349">                configuration.enableTls();</span>
+            }
+
+<span class="pc bpc" id="L352" title="1 of 2 branches missed.">            if (tlsCertVerificationEnabled) {</span>
+<span class="fc" id="L353">                configuration.enableTlsCertVerification()</span>
+<span class="fc" id="L354">                        .tlsTrustCertChainFile(tlsTrustCertChainFile);</span>
+            }
+
+<span class="fc" id="L357">            final GelfTransport gelfTransport = GelfTransports.create(configuration);</span>
+
+<span class="fc" id="L359">            return new GelfReporter(registry,</span>
+                    gelfTransport,
+                    clock,
+                    prefix,
+                    rateUnit,
+                    durationUnit,
+                    filter,
+                    level,
+                    source,
+                    additionalFields);
+        }
+    }
+
+<span class="fc" id="L372">    private static final Logger LOGGER = LoggerFactory.getLogger(GelfReporter.class);</span>
+
+    private final GelfTransport gelfTransport;
+    private final Clock clock;
+    private final String prefix;
+    private final GelfMessageLevel level;
+    private final String source;
+    private final Map&lt;String, Object&gt; additionalFields;
+
+    /**
+     * {@inheritDoc}
+     */
+    GelfReporter(MetricRegistry registry, GelfTransport gelfTransport,
+                 Clock clock, String prefix, TimeUnit rateUnit, TimeUnit durationUnit,
+                 MetricFilter filter, GelfMessageLevel level, String source, Map&lt;String, Object&gt; additionalFields) {
+<span class="fc" id="L387">        super(registry, &quot;gelf-reporter&quot;, filter, rateUnit, durationUnit);</span>
+<span class="fc" id="L388">        this.gelfTransport = requireNonNull(gelfTransport);</span>
+<span class="fc" id="L389">        this.clock = clock;</span>
+<span class="fc" id="L390">        this.prefix = prefix;</span>
+<span class="fc" id="L391">        this.level = level;</span>
+<span class="fc" id="L392">        this.source = source;</span>
+<span class="fc bfc" id="L393" title="All 2 branches covered.">        this.additionalFields = additionalFields == null ? Collections.&lt;String, Object&gt;emptyMap() : new HashMap&lt;&gt;(additionalFields);</span>
+<span class="fc" id="L394">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void report(SortedMap&lt;String, Gauge&gt; gauges,
+                       SortedMap&lt;String, Counter&gt; counters,
+                       SortedMap&lt;String, Histogram&gt; histograms,
+                       SortedMap&lt;String, Meter&gt; meters,
+                       SortedMap&lt;String, Timer&gt; timers) {
+<span class="pc bpc" id="L405" title="1 of 10 branches missed.">        if (gauges.isEmpty() &amp;&amp; counters.isEmpty() &amp;&amp; histograms.isEmpty() &amp;&amp; meters.isEmpty() &amp;&amp; timers.isEmpty()) {</span>
+<span class="nc" id="L406">            LOGGER.debug(&quot;All metrics are empty, nothing to report.&quot;);</span>
+<span class="nc" id="L407">            return;</span>
+        }
+
+<span class="fc" id="L410">        final long timestamp = clock.getTime();</span>
+
+<span class="fc bfc" id="L412" title="All 2 branches covered.">        for (Map.Entry&lt;String, Gauge&gt; entry : gauges.entrySet()) {</span>
+<span class="pc bpc" id="L413" title="1 of 2 branches missed.">            if (entry.getValue().getValue() != null) {</span>
+<span class="fc" id="L414">                final String name = prefix(entry.getKey());</span>
+<span class="fc" id="L415">                sendGauge(timestamp, name, entry.getValue());</span>
+            }
+<span class="fc" id="L417">        }</span>
+
+<span class="fc bfc" id="L419" title="All 2 branches covered.">        for (Map.Entry&lt;String, Counter&gt; entry : counters.entrySet()) {</span>
+<span class="fc" id="L420">            final String name = prefix(entry.getKey());</span>
+<span class="fc" id="L421">            sendCounter(timestamp, name, entry.getValue());</span>
+<span class="fc" id="L422">        }</span>
+
+<span class="fc bfc" id="L424" title="All 2 branches covered.">        for (Map.Entry&lt;String, Histogram&gt; entry : histograms.entrySet()) {</span>
+<span class="fc" id="L425">            final String name = prefix(entry.getKey());</span>
+<span class="fc" id="L426">            sendHistogram(timestamp, name, entry.getValue());</span>
+<span class="fc" id="L427">        }</span>
+
+<span class="fc bfc" id="L429" title="All 2 branches covered.">        for (Map.Entry&lt;String, Meter&gt; entry : meters.entrySet()) {</span>
+<span class="fc" id="L430">            final String name = prefix(entry.getKey());</span>
+<span class="fc" id="L431">            sendMeter(timestamp, name, entry.getValue());</span>
+<span class="fc" id="L432">        }</span>
+
+<span class="fc bfc" id="L434" title="All 2 branches covered.">        for (Map.Entry&lt;String, Timer&gt; entry : timers.entrySet()) {</span>
+<span class="fc" id="L435">            final String name = prefix(entry.getKey());</span>
+<span class="fc" id="L436">            sendTimer(timestamp, name, entry.getValue());</span>
+<span class="fc" id="L437">        }</span>
+<span class="fc" id="L438">    }</span>
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void stop() {
+<span class="fc" id="L445">        super.stop();</span>
+<span class="pc bpc" id="L446" title="1 of 2 branches missed.">        if (gelfTransport != null) {</span>
+<span class="fc" id="L447">            gelfTransport.stop();</span>
+        }
+<span class="fc" id="L449">    }</span>
+
+    private void sendTimer(long timestamp, String name, Timer timer) {
+<span class="fc" id="L452">        final Snapshot snapshot = timer.getSnapshot();</span>
+<span class="fc" id="L453">        final GelfMessageBuilder message = new GelfMessageBuilder(&quot;name=&quot; + name + &quot; type=TIMER&quot;, source)</span>
+<span class="fc" id="L454">                .timestamp(timestamp)</span>
+<span class="fc" id="L455">                .level(level)</span>
+<span class="fc" id="L456">                .additionalFields(additionalFields)</span>
+<span class="fc" id="L457">                .additionalField(&quot;name&quot;, name)</span>
+<span class="fc" id="L458">                .additionalField(&quot;type&quot;, &quot;TIMER&quot;)</span>
+<span class="fc" id="L459">                .additionalField(&quot;count&quot;, timer.getCount())</span>
+<span class="fc" id="L460">                .additionalField(&quot;min&quot;, convertDuration(snapshot.getMin()))</span>
+<span class="fc" id="L461">                .additionalField(&quot;max&quot;, convertDuration(snapshot.getMax()))</span>
+<span class="fc" id="L462">                .additionalField(&quot;mean&quot;, convertDuration(snapshot.getMean()))</span>
+<span class="fc" id="L463">                .additionalField(&quot;stddev&quot;, convertDuration(snapshot.getStdDev()))</span>
+<span class="fc" id="L464">                .additionalField(&quot;median&quot;, convertDuration(snapshot.getMedian()))</span>
+<span class="fc" id="L465">                .additionalField(&quot;p75&quot;, convertDuration(snapshot.get75thPercentile()))</span>
+<span class="fc" id="L466">                .additionalField(&quot;p95&quot;, convertDuration(snapshot.get95thPercentile()))</span>
+<span class="fc" id="L467">                .additionalField(&quot;p98&quot;, convertDuration(snapshot.get98thPercentile()))</span>
+<span class="fc" id="L468">                .additionalField(&quot;p99&quot;, convertDuration(snapshot.get99thPercentile()))</span>
+<span class="fc" id="L469">                .additionalField(&quot;p999&quot;, convertDuration(snapshot.get999thPercentile()))</span>
+<span class="fc" id="L470">                .additionalField(&quot;duration_unit&quot;, getDurationUnit())</span>
+<span class="fc" id="L471">                .additionalField(&quot;mean_rate&quot;, convertRate(timer.getMeanRate()))</span>
+<span class="fc" id="L472">                .additionalField(&quot;m1&quot;, convertRate(timer.getOneMinuteRate()))</span>
+<span class="fc" id="L473">                .additionalField(&quot;m5&quot;, convertRate(timer.getFiveMinuteRate()))</span>
+<span class="fc" id="L474">                .additionalField(&quot;m15&quot;, convertRate(timer.getFifteenMinuteRate()))</span>
+<span class="fc" id="L475">                .additionalField(&quot;rate_unit&quot;, getRateUnit());</span>
+
+<span class="fc" id="L477">        gelfTransport.trySend(message.build());</span>
+<span class="fc" id="L478">    }</span>
+
+    private void sendMeter(long timestamp, String name, Meter meter) {
+<span class="fc" id="L481">        final GelfMessageBuilder message = new GelfMessageBuilder(&quot;name=&quot; + name + &quot; type=METER&quot;, source)</span>
+<span class="fc" id="L482">                .timestamp(timestamp)</span>
+<span class="fc" id="L483">                .level(level)</span>
+<span class="fc" id="L484">                .additionalFields(additionalFields)</span>
+<span class="fc" id="L485">                .additionalField(&quot;name&quot;, name)</span>
+<span class="fc" id="L486">                .additionalField(&quot;type&quot;, &quot;METER&quot;)</span>
+<span class="fc" id="L487">                .additionalField(&quot;count&quot;, meter.getCount())</span>
+<span class="fc" id="L488">                .additionalField(&quot;mean_rate&quot;, convertRate(meter.getMeanRate()))</span>
+<span class="fc" id="L489">                .additionalField(&quot;m1&quot;, convertRate(meter.getOneMinuteRate()))</span>
+<span class="fc" id="L490">                .additionalField(&quot;m5&quot;, convertRate(meter.getFiveMinuteRate()))</span>
+<span class="fc" id="L491">                .additionalField(&quot;m15&quot;, convertRate(meter.getFifteenMinuteRate()))</span>
+<span class="fc" id="L492">                .additionalField(&quot;rate_unit&quot;, getRateUnit());</span>
+
+<span class="fc" id="L494">        gelfTransport.trySend(message.build());</span>
+<span class="fc" id="L495">    }</span>
+
+    private void sendHistogram(long timestamp, String name, Histogram histogram) {
+<span class="fc" id="L498">        final Snapshot snapshot = histogram.getSnapshot();</span>
+<span class="fc" id="L499">        final GelfMessageBuilder message = new GelfMessageBuilder(&quot;name=&quot; + name + &quot; type=HISTOGRAM&quot;, source)</span>
+<span class="fc" id="L500">                .timestamp(timestamp)</span>
+<span class="fc" id="L501">                .level(level)</span>
+<span class="fc" id="L502">                .additionalFields(additionalFields)</span>
+<span class="fc" id="L503">                .additionalField(&quot;name&quot;, name)</span>
+<span class="fc" id="L504">                .additionalField(&quot;type&quot;, &quot;HISTOGRAM&quot;)</span>
+<span class="fc" id="L505">                .additionalField(&quot;count&quot;, histogram.getCount())</span>
+<span class="fc" id="L506">                .additionalField(&quot;min&quot;, snapshot.getMin())</span>
+<span class="fc" id="L507">                .additionalField(&quot;max&quot;, snapshot.getMax())</span>
+<span class="fc" id="L508">                .additionalField(&quot;mean&quot;, snapshot.getMean())</span>
+<span class="fc" id="L509">                .additionalField(&quot;stddev&quot;, snapshot.getStdDev())</span>
+<span class="fc" id="L510">                .additionalField(&quot;median&quot;, snapshot.getMedian())</span>
+<span class="fc" id="L511">                .additionalField(&quot;p75&quot;, snapshot.get75thPercentile())</span>
+<span class="fc" id="L512">                .additionalField(&quot;p95&quot;, snapshot.get95thPercentile())</span>
+<span class="fc" id="L513">                .additionalField(&quot;p98&quot;, snapshot.get98thPercentile())</span>
+<span class="fc" id="L514">                .additionalField(&quot;p99&quot;, snapshot.get99thPercentile())</span>
+<span class="fc" id="L515">                .additionalField(&quot;p999&quot;, snapshot.get999thPercentile());</span>
+
+<span class="fc" id="L517">        gelfTransport.trySend(message.build());</span>
+<span class="fc" id="L518">    }</span>
+
+    private void sendCounter(long timestamp, String name, Counter counter) {
+<span class="fc" id="L521">        final GelfMessageBuilder message = new GelfMessageBuilder(&quot;name=&quot; + name + &quot; type=COUNTER&quot;, source)</span>
+<span class="fc" id="L522">                .timestamp(timestamp)</span>
+<span class="fc" id="L523">                .level(level)</span>
+<span class="fc" id="L524">                .additionalFields(additionalFields)</span>
+<span class="fc" id="L525">                .additionalField(&quot;name&quot;, name)</span>
+<span class="fc" id="L526">                .additionalField(&quot;type&quot;, &quot;COUNTER&quot;)</span>
+<span class="fc" id="L527">                .additionalField(&quot;count&quot;, counter.getCount());</span>
+
+<span class="fc" id="L529">        gelfTransport.trySend(message.build());</span>
+<span class="fc" id="L530">    }</span>
+
+    private void sendGauge(long timestamp, String name, Gauge gauge) {
+<span class="fc" id="L533">        final GelfMessageBuilder message = new GelfMessageBuilder(&quot;name=&quot; + name + &quot; type=GAUGE&quot;, source)</span>
+<span class="fc" id="L534">                .timestamp(timestamp)</span>
+<span class="fc" id="L535">                .level(level)</span>
+<span class="fc" id="L536">                .additionalFields(additionalFields)</span>
+<span class="fc" id="L537">                .additionalField(&quot;name&quot;, name)</span>
+<span class="fc" id="L538">                .additionalField(&quot;type&quot;, &quot;GAUGE&quot;)</span>
+<span class="fc" id="L539">                .additionalField(&quot;value&quot;, gauge.getValue());</span>
+
+<span class="fc" id="L541">        gelfTransport.trySend(message.build());</span>
+<span class="fc" id="L542">    }</span>
+
+    private String prefix(String... components) {
+<span class="fc" id="L545">        return MetricRegistry.name(prefix, components);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.eclemma.org/jacoco">JaCoCo</a> 0.7.7.201606060606</span></div></body></html>
