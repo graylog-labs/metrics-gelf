@@ -197,4 +197,12 @@ public class GelfReporterTest {
         registry.counter(name("test", "counter")).inc();
         gelfReporter.report();
     }
+
+
+    @Test
+    public void testStop() throws Exception {
+        gelfReporter.stop();
+
+        verify(transport, times(1)).stop();
+    }
 }

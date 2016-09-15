@@ -420,6 +420,14 @@ public class GelfReporter extends ScheduledReporter {
         }
     }
 
+    @Override
+    public void stop() {
+        super.stop();
+        if (gelfTransport != null) {
+            gelfTransport.stop();
+        }
+    }
+
     private void sendTimer(long timestamp, String name, Timer timer) {
         final Snapshot snapshot = timer.getSnapshot();
         final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=TIMER", source)
