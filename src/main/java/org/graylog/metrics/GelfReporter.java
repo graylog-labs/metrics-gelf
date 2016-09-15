@@ -34,7 +34,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
@@ -99,6 +98,8 @@ public class GelfReporter extends ScheduledReporter {
         /**
          * Inject your custom definition of how time passes. Usually the default clock is sufficient
          *
+         * @param clock The {@link Clock} instance the GELF reporter should use, not {@code null}.
+         * @return {@code this} builder instance
          * @see Clock
          */
         public Builder withClock(Clock clock) {
@@ -108,6 +109,9 @@ public class GelfReporter extends ScheduledReporter {
 
         /**
          * Configure a prefix for each metric name. Optional, but useful to identify single hosts
+         *
+         * @param prefix The prefix for each metric name
+         * @return {@code this} builder instance
          */
         public Builder prefixedWith(String prefix) {
             this.prefix = prefix;
@@ -116,6 +120,9 @@ public class GelfReporter extends ScheduledReporter {
 
         /**
          * Convert all the rates to a certain {@link TimeUnit}, defaults to seconds
+         *
+         * @param rateUnit The time unit of rates
+         * @return {@code this} builder instance
          */
         public Builder convertRatesTo(TimeUnit rateUnit) {
             this.rateUnit = requireNonNull(rateUnit);
@@ -124,6 +131,9 @@ public class GelfReporter extends ScheduledReporter {
 
         /**
          * Convert all the durations to a certain {@link TimeUnit}, defaults to milliseconds
+         *
+         * @param durationUnit The time unit of durations
+         * @return {@code this} builder instance
          */
         public Builder convertDurationsTo(TimeUnit durationUnit) {
             this.durationUnit = requireNonNull(durationUnit);
@@ -131,7 +141,10 @@ public class GelfReporter extends ScheduledReporter {
         }
 
         /**
-         * Allows to configure a special {@link MetricFilter}, which defines what metrics are reported
+         * Allows to configure a {@link MetricFilter}, which defines what metrics are reported
+         *
+         * @param filter The {@link MetricFilter} being used with this metrics reporter
+         * @return {@code this} builder instance
          */
         public Builder filter(MetricFilter filter) {
             this.filter = filter;
@@ -140,6 +153,9 @@ public class GelfReporter extends ScheduledReporter {
 
         /**
          * Address of the GELF server to connect to, defaults to {@code 127.0.0.1:12201}
+         *
+         * @param hostAddress the address of the GELF server to connect to
+         * @return {@code this} builder instance
          */
         public Builder host(InetSocketAddress hostAddress) {
             this.hostAddress = requireNonNull(hostAddress);
@@ -147,7 +163,10 @@ public class GelfReporter extends ScheduledReporter {
         }
 
         /**
-         * Additional fields to be included for each metric
+         * Additional fields to be included with each GELF message
+         *
+         * @param additionalFields A map of additional fields to include with each GELF message
+         * @return {@code this} builder instance
          */
         public Builder additionalFields(Map<String, Object> additionalFields) {
             this.additionalFields = requireNonNull(additionalFields);
@@ -158,7 +177,7 @@ public class GelfReporter extends ScheduledReporter {
          * Set the transport protocol used with the GELF server.
          *
          * @param transport the transport protocol used with the GELF server
-         * @return {@code this} instance
+         * @return {@code this} builder instance
          */
         public Builder transport(final GelfTransports transport) {
             this.transport = requireNonNull(transport);
@@ -169,7 +188,7 @@ public class GelfReporter extends ScheduledReporter {
          * Set the size of the internally used {@link java.util.concurrent.BlockingQueue}.
          *
          * @param size the size of the internally used queue
-         * @return {@code this} instance
+         * @return {@code this} builder instance
          */
         public Builder queueSize(final int size) {
             queueSize = size;
@@ -179,7 +198,8 @@ public class GelfReporter extends ScheduledReporter {
         /**
          * Enable TLS for transport.
          *
-         * @return {@code this} instance
+         * @param tlsEnabled Whether to enable TLS
+         * @return {@code this} builder instance
          */
         public Builder tlsEnabled(boolean tlsEnabled) {
             this.tlsEnabled = tlsEnabled;
@@ -190,7 +210,7 @@ public class GelfReporter extends ScheduledReporter {
          * Set the trust certificate chain file for the TLS connection.
          *
          * @param tlsTrustCertChainFile the trust certificate chain file
-         * @return {@code this} instance
+         * @return {@code this} builder instance
          */
         public Builder tlsTrustCertChainFile(final File tlsTrustCertChainFile) {
             this.tlsTrustCertChainFile = tlsTrustCertChainFile;
@@ -200,7 +220,8 @@ public class GelfReporter extends ScheduledReporter {
         /**
          * Enable TLS certificate verification for transport.
          *
-         * @return {@code this} instance
+         * @param tlsCertVerificationEnabled Whether to enable TLS certificate verification
+         * @return {@code this} builder instance
          */
         public Builder tlsCertVerificationEnabled(boolean tlsCertVerificationEnabled) {
             this.tlsCertVerificationEnabled = tlsCertVerificationEnabled;
@@ -211,7 +232,7 @@ public class GelfReporter extends ScheduledReporter {
          * Set the time to wait between reconnects in milliseconds.
          *
          * @param reconnectDelay the time to wait between reconnects in milliseconds
-         * @return {@code this} instance
+         * @return {@code this} builder instance
          */
         public Builder reconnectDelay(final int reconnectDelay) {
             this.reconnectDelay = reconnectDelay;
@@ -222,8 +243,7 @@ public class GelfReporter extends ScheduledReporter {
          * Set the connection timeout for TCP connections in milliseconds.
          *
          * @param connectTimeout the connection timeout for TCP connections in milliseconds
-         * @return {@code this} instance
-         * @see io.netty.channel.ChannelOption#CONNECT_TIMEOUT_MILLIS
+         * @return {@code this} builder instance
          */
         public Builder connectTimeout(final int connectTimeout) {
             this.connectTimeout = connectTimeout;
@@ -235,13 +255,18 @@ public class GelfReporter extends ScheduledReporter {
          *
          * @param tcpNoDelay {@code true} if Nagle's algorithm should used for TCP connections, {@code false} otherwise
          * @return {@code this} instance
-         * @see io.netty.channel.ChannelOption#TCP_NODELAY
          */
         public Builder tcpNoDelay(final boolean tcpNoDelay) {
             this.tcpNoDelay = tcpNoDelay;
             return this;
         }
 
+        /**
+         * Whether to use <a href="https://en.wikipedia.org/wiki/Keepalive#TCP_keepalive">TCP keepalive</a> for TCP connections.
+         *
+         * @param tcpKeepAlive Whether to use TCP keepalive for TCP connections
+         * @return {@code this} instance
+         */
         public Builder tcpKeepAlive(final boolean tcpKeepAlive) {
             this.tcpKeepAlive = tcpKeepAlive;
             return this;
@@ -252,8 +277,7 @@ public class GelfReporter extends ScheduledReporter {
          *
          * @param sendBufferSize the size of the socket send buffer in bytes.
          *                       A value of {@code -1} deactivates the socket send buffer.
-         * @return {@code this} instance
-         * @see io.netty.channel.ChannelOption#SO_SNDBUF
+         * @return {@code this} builder instance
          */
         public Builder sendBufferSize(final int sendBufferSize) {
             this.sendBufferSize = sendBufferSize;
@@ -264,24 +288,42 @@ public class GelfReporter extends ScheduledReporter {
          * Set the number of max queued network operations.
          *
          * @param maxInFlightSends max number of queued network operations
-         * @return {@code this} instance
+         * @return {@code this} builder instance
          */
         public Builder maxInFlightSends(int maxInFlightSends) {
             this.maxInFlightSends = maxInFlightSends;
             return this;
         }
 
+        /**
+         * Set the GELF message level used for reporting metrics.
+         *
+         * @param level GELF message level
+         * @return {@code this} builder instance
+         * @see GelfMessageLevel
+         */
         public Builder level(GelfMessageLevel level) {
             this.level = requireNonNull(level);
             return this;
         }
 
+        /**
+         * Set the name of the source of the GELF messages.
+         *
+         * @param source the name of the source host in the GELF messages
+         * @return {@code this} builder instance
+         */
         public Builder source(String source) {
             this.source = requireNonNull(source);
             return this;
         }
 
-        public GelfReporter build() throws IOException {
+        /**
+         * Build an instance of {@link GelfReporter} with the given configuration.
+         *
+         * @return A valid instance of {@link GelfReporter}
+         */
+        public GelfReporter build() {
             final GelfConfiguration configuration = new GelfConfiguration(hostAddress)
                     .transport(transport)
                     .queueSize(queueSize)
