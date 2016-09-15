@@ -7,7 +7,7 @@
 
     <groupId>org.graylog.metrics</groupId>
     <artifactId>metrics-gelf</artifactId>
-    <version>0.0.2</version>
+    <version>0.0.3-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>metrics-gelf</name>
@@ -26,7 +26,7 @@
         <url>https://github.com/Graylog2/metrics-gelf</url>
         <connection>scm:git:git@github.com:Graylog2/metrics-gelf.git</connection>
         <developerConnection>scm:git:git@github.com:Graylog2/metrics-gelf.git</developerConnection>
-        <tag>0.0.2</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
