@@ -1,6 +1,7 @@
 # GELF Metrics Reporter
 
 [![Build Status](https://travis-ci.org/Graylog2/metrics-gelf.svg?branch=master)](https://travis-ci.org/Graylog2/metrics-gelf)
+[![Maven Central](https://img.shields.io/maven-central/v/org.graylog.metrics/metrics-gelf.svg)](http://mvnrepository.com/artifact/org.graylog.metrics/metrics-gelf)
 
 This is a reporter for the [Dropwizard Metrics library](http://metrics.dropwizard.io/), similar to the [Graphite](http://metrics.dropwizard.io/3.1.0/manual/graphite/) or [Ganglia](http://metrics.dropwizard.io/3.1.0/manual/ganglia/) reporters, except that it reports to a GELF-capable server, such as [Graylog](https://www.graylog.org/).
 
@@ -15,7 +16,7 @@ You can simply add a dependency in your `pom.xml` (or whatever dependency resolu
 <dependency>
   <groupId>org.graylog.metrics</groupId>
   <artifactId>metrics-gelf</artifactId>
-  <version>1.0.0</version>
+  <version>${metrics-gelf.version}</version>
 </dependency>
 ```
 
