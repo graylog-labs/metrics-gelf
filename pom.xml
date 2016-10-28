@@ -81,7 +81,7 @@
         <gpg.keyname>B1606F22</gpg.keyname>
 
         <metrics.version>3.1.2</metrics.version>
-        <gelfclient.version>1.4.0</gelfclient.version>
+        <gelfclient.version>1.4.1</gelfclient.version>
     </properties>
 
     <dependencies>
