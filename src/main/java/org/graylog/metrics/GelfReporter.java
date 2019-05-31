@@ -1,12 +1,12 @@
 /**
  * Copyright © 2016 Graylog, Inc. (hello@graylog.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,16 +15,7 @@
  */
 package org.graylog.metrics;
 
-import com.codahale.metrics.Clock;
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.ScheduledReporter;
-import com.codahale.metrics.Snapshot;
-import com.codahale.metrics.Timer;
+import com.codahale.metrics.*;
 import org.graylog2.gelfclient.GelfConfiguration;
 import org.graylog2.gelfclient.GelfMessageBuilder;
 import org.graylog2.gelfclient.GelfMessageLevel;
@@ -82,6 +73,7 @@ public class GelfReporter extends ScheduledReporter {
 
         private Map<String, Object> additionalFields;
         private GelfTransports transport;
+        private boolean omitNanValues;
 
         private Builder(MetricRegistry registry) {
             this.registry = registry;
@@ -104,6 +96,7 @@ public class GelfReporter extends ScheduledReporter {
             this.maxInFlightSends = 512;
             this.level = GelfMessageLevel.INFO;
             this.source = "metrics";
+            this.omitNanValues = false;
         }
 
         /**
@@ -330,6 +323,17 @@ public class GelfReporter extends ScheduledReporter {
         }
 
         /**
+         * Whether to omit NaN values
+         *
+         * @param omitNanValues {@code true} if NaN values should be omitted {@code false} otherwise
+         * @return {@code this}
+         */
+        public Builder omitNanValues(boolean omitNanValues) {
+            this.source = requireNonNull(source);
+            return this;
+        }
+
+        /**
          * Builds a {@link GelfReporter} with the given properties.
          *
          * @return a {@link GelfReporter}
@@ -365,8 +369,42 @@ public class GelfReporter extends ScheduledReporter {
                     filter,
                     level,
                     source,
-                    additionalFields);
+                    additionalFields,
+                    omitNanValues);
         }
+    }
+
+    private static class FieldsBuilder {
+        private final Map<String, Object> map = new HashMap<>();
+        private final boolean omitNanValues;
+
+        FieldsBuilder(boolean omitNanValues) {
+            this.omitNanValues = omitNanValues;
+        }
+
+        FieldsBuilder additionalFields(final Map<String, Object> additionalFields) {
+            map.putAll(additionalFields);
+            return this;
+        }
+
+
+        FieldsBuilder additionalField(String name, Object value) {
+            if (omitNanValues) {
+                if (value == null) {
+                    return this;
+                }
+                if (value instanceof Double && (((Double) value).isNaN() || ((Double) value).isInfinite())) {
+                    return this;
+                }
+            }
+            map.put(name, value);
+            return this;
+        }
+
+        Map<String, Object> build() {
+            return map;
+        }
+
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GelfReporter.class);
@@ -377,13 +415,15 @@ public class GelfReporter extends ScheduledReporter {
     private final GelfMessageLevel level;
     private final String source;
     private final Map<String, Object> additionalFields;
+    private final boolean omitNanValues;
 
     /**
      * {@inheritDoc}
      */
     GelfReporter(MetricRegistry registry, GelfTransport gelfTransport,
                  Clock clock, String prefix, TimeUnit rateUnit, TimeUnit durationUnit,
-                 MetricFilter filter, GelfMessageLevel level, String source, Map<String, Object> additionalFields) {
+                 MetricFilter filter, GelfMessageLevel level, String source, Map<String, Object> additionalFields,
+                 boolean omitNanValues) {
         super(registry, "gelf-reporter", filter, rateUnit, durationUnit);
         this.gelfTransport = requireNonNull(gelfTransport);
         this.clock = clock;
@@ -391,6 +431,7 @@ public class GelfReporter extends ScheduledReporter {
         this.level = level;
         this.source = source;
         this.additionalFields = additionalFields == null ? Collections.<String, Object>emptyMap() : new HashMap<>(additionalFields);
+        this.omitNanValues = omitNanValues;
     }
 
     /**
@@ -450,9 +491,7 @@ public class GelfReporter extends ScheduledReporter {
 
     private void sendTimer(long timestamp, String name, Timer timer) {
         final Snapshot snapshot = timer.getSnapshot();
-        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=TIMER", source)
-                .timestamp(timestamp)
-                .level(level)
+        final Map<String, Object> fieldsMap = new FieldsBuilder(omitNanValues)
                 .additionalFields(additionalFields)
                 .additionalField("name", name)
                 .additionalField("type", "TIMER")
@@ -472,15 +511,19 @@ public class GelfReporter extends ScheduledReporter {
                 .additionalField("m1", convertRate(timer.getOneMinuteRate()))
                 .additionalField("m5", convertRate(timer.getFiveMinuteRate()))
                 .additionalField("m15", convertRate(timer.getFifteenMinuteRate()))
-                .additionalField("rate_unit", getRateUnit());
+                .additionalField("rate_unit", getRateUnit())
+                .build();
+
+        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=TIMER", source)
+                .timestamp(timestamp)
+                .level(level)
+                .additionalFields(fieldsMap);
 
         gelfTransport.trySend(message.build());
     }
 
     private void sendMeter(long timestamp, String name, Meter meter) {
-        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=METER", source)
-                .timestamp(timestamp)
-                .level(level)
+        final Map<String, Object> fieldsMap = new FieldsBuilder(omitNanValues)
                 .additionalFields(additionalFields)
                 .additionalField("name", name)
                 .additionalField("type", "METER")
@@ -489,16 +532,20 @@ public class GelfReporter extends ScheduledReporter {
                 .additionalField("m1", convertRate(meter.getOneMinuteRate()))
                 .additionalField("m5", convertRate(meter.getFiveMinuteRate()))
                 .additionalField("m15", convertRate(meter.getFifteenMinuteRate()))
-                .additionalField("rate_unit", getRateUnit());
+                .additionalField("rate_unit", getRateUnit())
+                .build();
+
+        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=METER", source)
+                .timestamp(timestamp)
+                .level(level)
+                .additionalFields(fieldsMap);
 
         gelfTransport.trySend(message.build());
     }
 
     private void sendHistogram(long timestamp, String name, Histogram histogram) {
         final Snapshot snapshot = histogram.getSnapshot();
-        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=HISTOGRAM", source)
-                .timestamp(timestamp)
-                .level(level)
+        final Map<String, Object> fieldsMap = new FieldsBuilder(omitNanValues)
                 .additionalFields(additionalFields)
                 .additionalField("name", name)
                 .additionalField("type", "HISTOGRAM")
@@ -512,31 +559,43 @@ public class GelfReporter extends ScheduledReporter {
                 .additionalField("p95", snapshot.get95thPercentile())
                 .additionalField("p98", snapshot.get98thPercentile())
                 .additionalField("p99", snapshot.get99thPercentile())
-                .additionalField("p999", snapshot.get999thPercentile());
+                .additionalField("p999", snapshot.get999thPercentile())
+                .build();
+
+        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=HISTOGRAM", source)
+                .timestamp(timestamp)
+                .level(level)
+                .additionalFields(fieldsMap);
 
         gelfTransport.trySend(message.build());
     }
 
     private void sendCounter(long timestamp, String name, Counter counter) {
-        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=COUNTER", source)
-                .timestamp(timestamp)
-                .level(level)
+        final Map<String, Object> fieldsMap = new FieldsBuilder(omitNanValues)
                 .additionalFields(additionalFields)
                 .additionalField("name", name)
                 .additionalField("type", "COUNTER")
-                .additionalField("count", counter.getCount());
+                .additionalField("count", counter.getCount())
+                .build();
+        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=COUNTER", source)
+                .timestamp(timestamp)
+                .level(level)
+                .additionalFields(fieldsMap);
 
         gelfTransport.trySend(message.build());
     }
 
     private void sendGauge(long timestamp, String name, Gauge gauge) {
-        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=GAUGE", source)
-                .timestamp(timestamp)
-                .level(level)
+        final Map<String, Object> fieldsMap = new FieldsBuilder(omitNanValues)
                 .additionalFields(additionalFields)
                 .additionalField("name", name)
                 .additionalField("type", "GAUGE")
-                .additionalField("value", gauge.getValue());
+                .additionalField("value", gauge.getValue())
+                .build();
+        final GelfMessageBuilder message = new GelfMessageBuilder("name=" + name + " type=GAUGE", source)
+                .timestamp(timestamp)
+                .level(level)
+                .additionalFields(fieldsMap);
 
         gelfTransport.trySend(message.build());
     }
