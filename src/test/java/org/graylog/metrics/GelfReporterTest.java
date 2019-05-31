@@ -71,7 +71,7 @@ public class GelfReporterTest {
                 MetricFilter.ALL,
                 GelfMessageLevel.DEBUG,
                 "source",
-                Collections.<String, Object>singletonMap("test", "foobar")
+                Collections.<String, Object>singletonMap("test", "foobar"), true
         );
     }
 
@@ -185,6 +185,29 @@ public class GelfReporterTest {
                 .containsEntry("name", "prefix.foo.bar")
                 .containsEntry("type", "GAUGE")
                 .containsEntry("value", 1234)
+                .containsEntry("test", "foobar");
+    }
+
+    @Test
+    public void testGaugeOmitNanValue() throws Exception {
+        registry.register(name("foo", "bar"), new Gauge<Double>() {
+            @Override
+            public Double getValue() {
+                return Double.NaN;
+            }
+        });
+        gelfReporter.report();
+
+        verify(transport, times(1)).trySend(gelfMessageCaptor.capture());
+
+        final GelfMessage gelfMessage = gelfMessageCaptor.getValue();
+        assertThat(gelfMessage.getMessage()).isEqualTo("name=prefix.foo.bar type=GAUGE");
+        assertThat(gelfMessage.getLevel()).isEqualTo(GelfMessageLevel.DEBUG);
+        assertThat(gelfMessage.getHost()).isEqualTo("source");
+        assertThat(gelfMessage.getAdditionalFields())
+                .hasSize(3)
+                .containsEntry("name", "prefix.foo.bar")
+                .containsEntry("type", "GAUGE")
                 .containsEntry("test", "foobar");
     }
 
